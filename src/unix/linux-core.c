@@ -75,6 +75,12 @@
 # define CLOCK_BOOTTIME 7
 #endif
 
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+#include <sanitizer/msan_interface.h>
+#endif
+#endif
+
 static int read_models(unsigned int numcpus, uv_cpu_info_t* ci);
 static int read_times(FILE* statfile_fp,
                       unsigned int numcpus,
@@ -211,6 +217,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
   static int no_epoll_pwait;
   static int no_epoll_wait;
   struct epoll_event events[1024];
+#if defined(__has_feature)
+#if __has_feature(memory_sanitizer)
+  __msan_unpoison(events, 1024);
+#endif
+#endif
   struct epoll_event* pe;
   struct epoll_event e;
   int real_timeout;
