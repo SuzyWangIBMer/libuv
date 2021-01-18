@@ -328,4 +328,14 @@ int uv__getsockpeername(const uv_handle_t* handle,
                         struct sockaddr* name,
                         int* namelen);
 
+#if !defined(THREAD_SANITIZER)
+#    if defined(__has_feature)
+#        if __has_feature(thread_sanitizer)
+#            define THREAD_SANITIZER 1
+#        endif
+#    elif defined(__SANITIZE_THREAD__)
+#        define THREAD_SANITIZER 1
+#    endif
+#endif
+
 #endif /* UV_UNIX_INTERNAL_H_ */
