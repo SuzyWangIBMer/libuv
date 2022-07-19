@@ -160,14 +160,20 @@ static void post(QUEUE* q, enum uv__work_kind kind) {
 }
 
 
+#ifdef __MVS__
+/* TODO(itodorov) - zos: revisit when Woz compiler is available. */
+__attribute__((destructor))
+#endif
 void uv__threadpool_cleanup(void) {
-#ifndef _WIN32
   unsigned int i;
 
   if (nthreads == 0)
     return;
 
+#ifndef __MVS__
+  /* TODO(gabylb) - zos: revisit when Woz compiler is available. */
   post(&exit_message, UV__WORK_CPU);
+#endif
 
   for (i = 0; i < nthreads; i++)
     if (uv_thread_join(threads + i))
@@ -181,7 +187,6 @@ void uv__threadpool_cleanup(void) {
 
   threads = NULL;
   nthreads = 0;
-#endif
 }
 
 
@@ -241,14 +246,6 @@ static void reset_once(void) {
 
 
 static void init_once(void) {
-#ifndef _WIN32
-  /* Re-initialize the threadpool after fork.
-   * Note that this discards the global mutex and condition as well
-   * as the work queue.
-   */
-  if (pthread_atfork(NULL, NULL, &reset_once))
-    abort();
-#endif
   init_threads();
 }
 

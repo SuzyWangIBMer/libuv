@@ -63,16 +63,6 @@ RB_GENERATE_STATIC(uv__signal_tree_s,
 static void uv__signal_global_reinit(void);
 
 static void uv__signal_global_init(void) {
-  if (uv__signal_lock_pipefd[0] == -1)
-    /* pthread_atfork can register before and after handlers, one
-     * for each child. This only registers one for the child. That
-     * state is both persistent and cumulative, so if we keep doing
-     * it the handler functions will be called multiple times. Thus
-     * we only want to do it once.
-     */
-    if (pthread_atfork(NULL, NULL, &uv__signal_global_reinit))
-      abort();
-
   uv__signal_global_reinit();
 }
 
@@ -143,6 +133,8 @@ static void uv__signal_block_and_lock(sigset_t* saved_sigmask) {
   if (sigfillset(&new_mask))
     abort();
 
+  /* to shut up valgrind */
+  sigemptyset(saved_sigmask);
   if (pthread_sigmask(SIG_SETMASK, &new_mask, saved_sigmask))
     abort();
 
@@ -263,7 +255,7 @@ static int uv__signal_loop_once_init(uv_loop_t* loop) {
   if (loop->signal_pipefd[0] != -1)
     return 0;
 
-  err = uv__make_pipe(loop->signal_pipefd, UV__F_NONBLOCK);
+  err = uv__make_pipe(loop->signal_pipefd, UV_NONBLOCK_PIPE);
   if (err)
     return err;
 
