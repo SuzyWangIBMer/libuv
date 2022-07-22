@@ -3,8 +3,14 @@
 cmake_minimum_required(VERSION 3.4)
 project(libuv LANGUAGES C)
 
+cmake_policy(SET CMP0057 NEW) # Enable IN_LIST operator
+cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
+
+list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
+
 include(CMakePackageConfigHelpers)
 include(CMakeDependentOption)
+include(CheckCCompilerFlag)
 include(GNUInstallDirs)
 include(CTest)
 
@@ -15,12 +21,81 @@ if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
   list(APPEND uv_cflags -Wno-unused-parameter)
 endif()
 
+# Compiler check
+string(CONCAT is-msvc $<OR:
+  $<C_COMPILER_ID:MSVC>,
+  $<STREQUAL:${CMAKE_C_COMPILER_FRONTEND_VARIANT},MSVC>
+>)
+
+check_c_compiler_flag(/W4 UV_LINT_W4)
+check_c_compiler_flag(/wd4100 UV_LINT_NO_UNUSED_PARAMETER_MSVC)
+check_c_compiler_flag(/wd4127 UV_LINT_NO_CONDITIONAL_CONSTANT_MSVC)
+check_c_compiler_flag(/wd4201 UV_LINT_NO_NONSTANDARD_MSVC)
+check_c_compiler_flag(/wd4206 UV_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC)
+check_c_compiler_flag(/wd4210 UV_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC)
+check_c_compiler_flag(/wd4232 UV_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC)
+check_c_compiler_flag(/wd4456 UV_LINT_NO_HIDES_LOCAL)
+check_c_compiler_flag(/wd4457 UV_LINT_NO_HIDES_PARAM)
+check_c_compiler_flag(/wd4459 UV_LINT_NO_HIDES_GLOBAL)
+check_c_compiler_flag(/wd4706 UV_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC)
+check_c_compiler_flag(/wd4996 UV_LINT_NO_UNSAFE_MSVC)
+
+check_c_compiler_flag(-Wall UV_LINT_WALL) # DO NOT use this under MSVC
+
+# TODO: Place these into its own function
+check_c_compiler_flag(-Wno-unused-parameter UV_LINT_NO_UNUSED_PARAMETER)
+check_c_compiler_flag(-Wstrict-prototypes UV_LINT_STRICT_PROTOTYPES)
+check_c_compiler_flag(-Wextra UV_LINT_EXTRA)
+
+check_c_compiler_flag(/utf-8 UV_LINT_UTF8_MSVC)
+
+set(lint-no-unused-parameter $<$<BOOL:${UV_LINT_NO_UNUSED_PARAMETER}>:-Wno-unused-parameter>)
+set(lint-strict-prototypes $<$<BOOL:${UV_LINT_STRICT_PROTOTYPES}>:-Wstrict-prototypes>)
+set(lint-extra $<$<BOOL:${UV_LINT_EXTRA}>:-Wextra>)
+set(lint-w4 $<$<BOOL:${UV_LINT_W4}>:/W4>)
+set(lint-no-unused-parameter-msvc $<$<BOOL:${UV_LINT_NO_UNUSED_PARAMETER_MSVC}>:/wd4100>)
+set(lint-no-conditional-constant-msvc $<$<BOOL:${UV_LINT_NO_CONDITIONAL_CONSTANT_MSVC}>:/wd4127>)
+set(lint-no-nonstandard-msvc $<$<BOOL:${UV_LINT_NO_NONSTANDARD_MSVC}>:/wd4201>)
+set(lint-no-nonstandard-empty-tu-msvc $<$<BOOL:${UV_LINT_NO_NONSTANDARD_EMPTY_TU_MSVC}>:/wd4206>)
+set(lint-no-nonstandard-file-scope-msvc $<$<BOOL:${UV_LINT_NO_NONSTANDARD_FILE_SCOPE_MSVC}>:/wd4210>)
+set(lint-no-nonstandard-nonstatic-dlimport-msvc $<$<BOOL:${UV_LINT_NO_NONSTANDARD_NONSTATIC_DLIMPORT_MSVC}>:/wd4232>)
+set(lint-no-hides-local-msvc $<$<BOOL:${UV_LINT_NO_HIDES_LOCAL}>:/wd4456>)
+set(lint-no-hides-param-msvc $<$<BOOL:${UV_LINT_NO_HIDES_PARAM}>:/wd4457>)
+set(lint-no-hides-global-msvc $<$<BOOL:${UV_LINT_NO_HIDES_GLOBAL}>:/wd4459>)
+set(lint-no-conditional-assignment-msvc $<$<BOOL:${UV_LINT_NO_CONDITIONAL_ASSIGNMENT_MSVC}>:/wd4706>)
+set(lint-no-unsafe-msvc $<$<BOOL:${UV_LINT_NO_UNSAFE_MSVC}>:/wd4996>)
+# Unfortunately, this one is complicated because MSVC and clang-cl support -Wall
+# but using it is like calling -Weverything
+string(CONCAT lint-default $<
+  $<AND:$<BOOL:${UV_LINT_WALL}>,$<NOT:${is-msvc}>>:-Wall
+>)
+set(lint-utf8-msvc $<$<BOOL:${UV_LINT_UTF8_MSVC}>:/utf-8>)
+
+list(APPEND uv_cflags ${lint-strict-prototypes} ${lint-extra} ${lint-default} ${lint-w4})
+list(APPEND uv_cflags ${lint-no-unused-parameter})
+list(APPEND uv_cflags ${lint-no-unused-parameter-msvc})
+list(APPEND uv_cflags ${lint-no-conditional-constant-msvc})
+list(APPEND uv_cflags ${lint-no-nonstandard-msvc})
+list(APPEND uv_cflags ${lint-no-nonstandard-empty-tu-msvc})
+list(APPEND uv_cflags ${lint-no-nonstandard-file-scope-msvc})
+list(APPEND uv_cflags ${lint-no-nonstandard-nonstatic-dlimport-msvc})
+list(APPEND uv_cflags ${lint-no-hides-local-msvc})
+list(APPEND uv_cflags ${lint-no-hides-param-msvc})
+list(APPEND uv_cflags ${lint-no-hides-global-msvc})
+list(APPEND uv_cflags ${lint-no-conditional-assignment-msvc})
+list(APPEND uv_cflags ${lint-no-unsafe-msvc})
+list(APPEND uv_cflags ${lint-utf8-msvc} )
+
+check_c_compiler_flag(-fno-strict-aliasing UV_F_STRICT_ALIASING)
+list(APPEND uv_cflags $<$<BOOL:${UV_F_STRICT_ALIASING}>:-fno-strict-aliasing>)
+
 set(uv_sources
     src/fs-poll.c
     src/idna.c
     src/inet.c
     src/random.c
     src/strscpy.c
+    src/strtok.c
     src/threadpool.c
     src/timer.c
     src/uv-common.c
@@ -221,26 +296,30 @@ if(CMAKE_SYSTEM_NAME STREQUAL "AIX")
        _ALL_SOURCE
        _LINUX_SOURCE_COMPAT
        _THREAD_SAFE
-       _XOPEN_SOURCE=500)
+       _XOPEN_SOURCE=500
+       HAVE_SYS_AHAFS_EVPRODS_H)
   list(APPEND uv_libraries perfstat)
-  list(APPEND uv_sources src/unix/aix.c)
+  list(APPEND uv_sources
+       src/unix/aix.c
+       src/unix/aix-common.c)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
-  list(APPEND uv_libs dl)
+  list(APPEND uv_defines _GNU_SOURCE)
+  list(APPEND uv_libraries dl)
   list(APPEND uv_sources
-       src/unix/android-ifaddrs.c
        src/unix/linux-core.c
        src/unix/linux-inotify.c
        src/unix/linux-syscalls.c
        src/unix/procfs-exepath.c
        src/unix/pthread-fixes.c
+       src/unix/random-getentropy.c
        src/unix/random-getrandom.c
        src/unix/random-sysctl-linux.c
-       src/unix/sysinfo-loadavg.c)
+       src/unix/epoll.c)
 endif()
 
-if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "Android|Linux|OS/390")
+if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "Android|Linux")
   list(APPEND uv_sources src/unix/proctitle.c)
 endif()
 
@@ -272,6 +351,22 @@ if(APPLE)
        src/unix/fsevents.c)
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "GNU")
+  list(APPEND uv_libraries dl)
+  list(APPEND uv_sources
+       src/unix/bsd-ifaddrs.c
+       src/unix/no-fsevents.c
+       src/unix/no-proctitle.c
+       src/unix/posix-hrtime.c
+       src/unix/posix-poll.c
+       src/unix/hurd.c)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "kFreeBSD")
+  list(APPEND uv_defines _GNU_SOURCE)
+  list(APPEND uv_libraries dl freebsd-glue)
+endif()
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112)
   list(APPEND uv_libraries dl rt)
@@ -282,7 +377,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
        src/unix/procfs-exepath.c
        src/unix/random-getrandom.c
        src/unix/random-sysctl-linux.c
-       src/unix/sysinfo-loadavg.c)
+       src/unix/epoll.c)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
@@ -294,10 +389,13 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
   list(APPEND uv_sources src/unix/openbsd.c)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "OS/390")
-  list(APPEND uv_defines PATH_MAX=255)
+if(CMAKE_SYSTEM_NAME STREQUAL "OS390")
+  enable_language(CXX)
+  list(APPEND uv_defines PATH_MAX=1024)
   list(APPEND uv_defines _AE_BIMODAL)
   list(APPEND uv_defines _ALL_SOURCE)
+  list(APPEND uv_defines _ENHANCED_ASCII_EXT=0xFFFFFFFF)
+  list(APPEND uv_defines _ISOC99_SOURCE)
   list(APPEND uv_defines _LARGE_TIME_API)
   list(APPEND uv_defines _OPEN_MSGQ_EXT)
   list(APPEND uv_defines _OPEN_SYS_FILE_EXT)
@@ -307,18 +405,75 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OS/390")
   list(APPEND uv_defines _UNIX03_SOURCE)
   list(APPEND uv_defines _UNIX03_THREADS)
   list(APPEND uv_defines _UNIX03_WITHDRAWN)
+  list(APPEND uv_defines _XOPEN_SOURCE=600)
   list(APPEND uv_defines _XOPEN_SOURCE_EXTENDED)
   list(APPEND uv_sources
        src/unix/pthread-fixes.c
-       src/unix/pthread-barrier.c
        src/unix/os390.c
-       src/unix/os390-syscalls.c)
+       src/unix/os390-syscalls.c
+       src/unix/os390-proctitle.c)
+  list(APPEND uv_cflags
+       -q64
+       -qascii
+       -qexportall
+       -qgonumber
+       -qlongname
+       -qlibansi
+       -qfloat=IEEE
+       -qtune=10
+       -qarch=10
+       -qasm
+       -qasmlib=sys1.maclib:sys1.modgen)
+  find_library(ZOSLIB
+    NAMES zoslib
+    PATHS ${ZOSLIB_DIR}
+    PATH_SUFFIXES lib
+  )
+  list(APPEND uv_libraries ${ZOSLIB})
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "OS400")
+  list(APPEND uv_defines
+       _ALL_SOURCE
+       _LINUX_SOURCE_COMPAT
+       _THREAD_SAFE
+       _XOPEN_SOURCE=500)
+  list(APPEND uv_sources
+    src/unix/aix-common.c
+    src/unix/ibmi.c
+    src/unix/no-fsevents.c
+    src/unix/posix-poll.c)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
-  list(APPEND uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500)
+  list(APPEND uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500 _REENTRANT)
   list(APPEND uv_libraries kstat nsl sendfile socket)
-  list(APPEND uv_sources src/unix/no-proctitle.c src/unix/sunos.c)
+  list(APPEND uv_sources
+       src/unix/no-proctitle.c
+       src/unix/sunos.c)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
+  list(APPEND uv_defines _BSD_SOURCE)
+  list(APPEND uv_libraries bsd network)
+  list(APPEND uv_sources
+	  src/unix/haiku.c
+	  src/unix/bsd-ifaddrs.c
+	  src/unix/no-fsevents.c
+	  src/unix/no-proctitle.c
+	  src/unix/posix-hrtime.c
+	  src/unix/posix-poll.c)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "QNX")
+  list(APPEND uv_sources
+    src/unix/posix-hrtime.c
+    src/unix/posix-poll.c
+    src/unix/qnx.c
+    src/unix/bsd-ifaddrs.c
+    src/unix/no-proctitle.c
+    src/unix/no-fsevents.c)
+  list(APPEND uv_libraries socket)
 endif()
 
 if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "DragonFly|FreeBSD|Linux|NetBSD|OpenBSD")
@@ -335,8 +490,11 @@ list(APPEND uv_defines CLICKHOUSE_GLIBC_COMPATIBILITY)
 
 add_library(uv SHARED ${uv_sources})
 target_compile_definitions(uv
-                           INTERFACE USING_UV_SHARED=1
-                           PRIVATE ${uv_defines} BUILDING_UV_SHARED=1)
+  INTERFACE
+    USING_UV_SHARED=1
+  PRIVATE
+    BUILDING_UV_SHARED=1
+    ${uv_defines})
 target_compile_options(uv PRIVATE ${uv_cflags})
 target_include_directories(uv PUBLIC ${LIBUV_ROOT_DIR}/include PRIVATE ${LIBUV_ROOT_DIR}/src)
 target_link_libraries(uv ${uv_libraries})
