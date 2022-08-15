@@ -365,5 +365,4 @@ uv__fs_copy_file_range(int fd_in,
                        unsigned int flags);
 #endif
 
-
 #endif /* UV_UNIX_INTERNAL_H_ */
